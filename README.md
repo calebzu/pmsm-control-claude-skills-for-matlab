@@ -12,7 +12,7 @@ prerequisites, open Claude Code in the folder, and follow [`CLAUDE.md`](CLAUDE.m
 | Path | Contents |
 |------|----------|
 | [`CLAUDE.md`](CLAUDE.md) | Workspace entry point — setup steps and working rules a fresh Claude Code reads on open. |
-| `.claude/skills/` | Four PMSM modeling skills (Claude Code skill format), registered automatically when Claude Code opens this folder. |
+| `.claude/skills/` | Four PMSM modeling skills plus a general-purpose Simulink layout utility (Claude Code skill format), registered automatically when Claude Code opens this folder. |
 | `workflow/` | The 11-phase [Reference Model Learning Workflow](workflow/reference_model_learning_workflow.md) for distilling a reference model into a Claude Code skill under anti-contamination discipline. |
 | `shared/` | Domain assets the skills reuse: `formulas/` (PMSM plant model + control-law derivations), `building_blocks/` (atomic Simulink blocks + API notes). |
 | `workspace/` | Where you build your own models. |
@@ -23,6 +23,7 @@ prerequisites, open Claude Code in the folder, and follow [`CLAUDE.md`](CLAUDE.m
 - **`motor-fcs-mpc`** — single-vector Finite-Control-Set Model Predictive Control (inner current loop).
 - **`motor-dtc-pmsm`** — Direct Torque Control (αβ frame, Sutikno 6-state switching table).
 - **`motor-smc-pmsm`** — Sliding Mode Control speed loop (PD-type sliding surface + super-twisting) over a dq PI current loop.
+- **`simulink-layout-tidy`** — general-purpose Simulink layout tidier: removes block overlaps, minimizes line crossings honestly (never promising a zero the graph's topology forbids), and exports a screenshot for human sign-off. Not motor-specific; supports the layout gate used in the build workflow.
 
 ## Prerequisites
 

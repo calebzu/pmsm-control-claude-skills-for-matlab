@@ -1,6 +1,6 @@
 # Reference-Model Skill Distillation: A Methodology
 
-> **Version**: 1.0 (initial public release, 2026-05-18)
+> **Version**: 1.1 (layout-readability gate added; initial public release 1.0, 2026-05-18)
 > **Author**: Zong Chuhang <ZONG0008@e.ntu.edu.sg>
 > **License**: Apache 2.0
 >
@@ -617,6 +617,21 @@ Load the baseline waveforms and the rebuild waveforms; overlay the five primary 
 
 **Layer 2 acceptance**: Visual 4-Check passes **and** every primary signal hits ≥ 95 %.
 
+##### Layout Gate (readability — mandatory, not advisory) ⭐
+
+**Why this gate exists**: An automated build (a subagent issuing `add_block` / `add_line` programmatically) produces, by default, a tangled diagram — overlapping blocks, lines cutting through blocks, a mesh of line-line crossings — that a human cannot review. An advisory "please lay it out neatly" clause gets silently skipped. The layout gate makes readability a hard constraint — and because it **only moves blocks/lines and never changes a connection**, the simulated behavior is 100 % unchanged.
+
+| Tier | Metric | Nature | How it is met |
+|---|---|---|---|
+| **Hard** | `block_overlaps == 0` | enforced by self-test T7 (build FAILs otherwise) + a mandatory human screenshot sign-off | always reachable on a 2-D plane; the main session exports a `.png` for the user (the same human-in-loop model as the Visual 4-Check) |
+| **Soft** | line-line crossings / line-through-block hits | **reported only, NEVER a numeric gate** | a layout-tidy pass (arrange + de-overlap + planarity diagnosis) minimizes them |
+
+**Why crossings cannot be hard-gated**: A non-planar signal graph (a K3,3 or K5 subgraph) cannot reach zero crossings on a 2-D plane (Kuratowski) — N estimators each fanning out to a selector *and* a logger while sharing inputs is a textbook K3,3. Reaching zero requires *restructuring* (encapsulating fan-in groups into a Subsystem, routing long or shared signals via Goto/From), not moving blocks; hard-gating a crossing count would reject valid non-planar models.
+
+**`arrangeSystem` pitfall**: `arrangeSystem(mdl, 'FullLayout')` fixes overlaps and compactness but can *worsen* crossings — the tidy pass must measure crossings before and after and roll back when `after > before` (never accept a net crossing regression).
+
+**Validated observation**: A roughly 90-block auto-built model could not be made readable by block-moves alone — its signal graph is provably non-planar (a K3,3 witness subgraph) — establishing the boundary: small models tidy by moving blocks, complex non-planar models require restructuring (Subsystem encapsulation + Goto/From).
+
 #### Failure handling
 
 - Any Layer failing → Phase 6 reverse-correction round `N` (rules below).
@@ -643,6 +658,7 @@ Load the baseline waveforms and the rebuild waveforms; overlay the five primary 
 **Composite acceptance**:
 - Layer 1: every structural diff entry has been classified, with user confirmation that no entry remains unassigned.
 - Layer 2: Visual 4-Check passes **and** every primary signal hits ≥ 95 %.
+- **Layout gate**: `block_overlaps == 0` (self-test T7 hard pass) + the user has seen a diagram screenshot; crossings / line-through-block are reported soft, not gated.
 - **Claude must not self-pass**: every acceptance gate must have a user-visible review trace (in the session-memory bookmark or commit message).
 
 ---
@@ -739,7 +755,7 @@ Load the baseline waveforms and the rebuild waveforms; overlay the five primary 
 
 | Gate | Owner | PASS criterion | Failure path |
 |---|---|---|---|
-| **G1 Numerical** | fresh subagent | Layer 1 self-tests all PASS (default 5 / 5) **and** Layer 2 hit rate meets the mode threshold (A: ≥ 90 %, B: ≥ 4 / 5 = 80 %) | FAIL → enter Refinement Loop on FAIL (below) and bump `v0.x` |
+| **G1 Numerical** | fresh subagent | Layer 1 self-tests all PASS (default 5 / 5, including the layout gate T7 `block_overlaps == 0`) **and** Layer 2 hit rate meets the mode threshold (A: ≥ 90 %, B: ≥ 4 / 5 = 80 %) | FAIL → enter Refinement Loop on FAIL (below) and bump `v0.x` |
 | **G2 Reverse-leak audit** | main session | A 4-grep audit returns clean: matches only against the SKILL.md changelog metadata or compliance statement, **not** against any must-NOT-read file actually being read. The four greps: ① `rebuild_round*` ② `deep_dive\|_audit\.md\|_dump` ③ `sessions/` ④ cross-method (`methods/<other_method>/`) | FAIL → if the fresh subagent really read a must-NOT-read file, this verification is invalidated and a fresh subagent must be spawned; if it is only a textual citation, no action |
 | **G3 Documentation precision** | main session | Ambiguities and vague phrasings flagged by the fresh subagent must be revised in SKILL.md before promotion (e.g., a metric specified as "monotonic increasing" without distinguishing strict-per-sample vs net-monotonic will be read strictly and falsely FAIL on any controller that has expected per-sample reverse motion from hysteresis dead-bands) | FAIL → revise phrasing; fresh-subagent verification need not be re-run (both readings have demonstrably passed); this is a documentation-level improvement |
 | **G4 User visual review** | user, in person at the MATLAB desktop | The main session uses `mcp__matlab__evaluate_matlab_code` (or `matlab` CLI) to open the `.slx`, run the simulation, and bring up every relevant Scope (including XY graphs and `abc` traces). The user **must pass the Visual 4-Check** (motor rotates / `i_q` tracks / `abc` AC sinusoidal not DC-locked / `T_e` energy balance) plus any method-specific failure signature, then verbally or in-writing confirm "passed." | FAIL → user describes the anomalous waveform → enter v0.x revision cycle |
@@ -753,6 +769,8 @@ Load the baseline waveforms and the rebuild waveforms; overlay the five primary 
 Plus method-specific failure signatures, for example:
 - **For DTC**: the `α-β` stator-flux trajectory should be circular (a hexagonal trajectory indicates an 8-state switching-table contamination, a known failure mode of naive Takahashi tables on PMSMs).
 - **For finite-control-set MPC**: the `α-β` XY trajectory should rotate in the correct direction (reversed rotation is a critical bug signature of incorrect inverse-Park sign convention).
+
+**Plus diagram readability**: the opened `.slx` should present a readable layout (zero block overlaps is machine-guaranteed by self-test T7; the main session attaches a diagram screenshot). A tangled diagram (overlapping blocks / a mesh of crossing lines) sends the model back to the layout gate, independently of whether the waveforms pass.
 
 **Main-session protocol**: The main session **must explicitly ask** the user: "Please open MATLAB and verify the 4 Scopes (`ω_m`, `i_q`, `abc`, `T_e`). Have all four visual checks passed?" Wait for the user's **explicit, item-wise** response (or an explicit "all four pass"). **Do not accept** an ambiguous "OK" / "looks fine" — the main session must re-confirm if the response is not explicitly four-pass.
 

@@ -26,6 +26,7 @@ If the MCP server is not available, run MATLAB through its CLI:
 - `motor-fcs-mpc` — single-vector Finite-Control-Set MPC current loop.
 - `motor-dtc-pmsm` — Direct Torque Control, αβ frame, Sutikno 6-state switching table.
 - `motor-smc-pmsm` — Sliding Mode Control speed loop (PD-type sliding + super-twisting) over a dq PI current loop.
+- `simulink-layout-tidy` — general-purpose Simulink layout tidier (compact, overlap-free, honest crossing report). Not motor-specific; supports the layout gate.
 
 Each method skill layers on `motor-pmsm-base`. Read the relevant `SKILL.md` and its `references/` before building.
 
