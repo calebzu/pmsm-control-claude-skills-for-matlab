@@ -14,6 +14,7 @@ Reusable plant + frame conventions + building blocks + sanity-check templates + 
 - **Use `shared/*` assets, do not duplicate.** `shared/formulas/pmsm_formulas.md` has signed-off plant equations and control law derivations. `shared/building_blocks/` provides verified atomic blocks. Reference them by path; do not re-derive or copy content.
 - **Run pre-build sanity grid before any build.** See [references/pre_build_grid.md](references/pre_build_grid.md). Fail-fast when Vdc/BEMF tight, Goto TagVisibility default-local, FF dimensional incorrect, or sector=7 startup unhandled.
 - **Visual 4-check before trusting numerical metrics**: motor rotates / iq tracks reference / abc AC sinusoidal / Te energy balance. If any check fails, fix the implementation before computing 5-metric scores.
+- **Layout gate after build (MANDATORY, not advisory — prevents silent skip)**: `block_overlaps==0` is a HARD self-test (T7; build fails otherwise) + a mandatory human screenshot sign-off (same human-in-loop model as the Visual 4-check). Line-line crossings and line-through-block hits are SOFT (reported, NEVER numeric-gated): non-planar signal graphs (K3,3/K5) cannot reach zero crossings on a 2-D plane (Kuratowski), so reach zero only by restructuring (Subsystem encapsulation / Goto/From), never by hard-gating a count. See [references/measurement_logger.md](references/measurement_logger.md).
 - **One-click reproducibility**: model must Run from `.slx` double-click without prior script execution. Inject all parameters via `set_param(mdl, 'InitFcn', ...)`.
 - **Don't guess conventions.** dq is amplitude-invariant (factor 2/3); Anti_Park's internal `From "The"` requires `Goto_The TagVisibility='global'`. See [references/plant_modeling.md](references/plant_modeling.md) and [references/building_blocks.md](references/building_blocks.md).
 - **PMSM block `RefAngle` must be `'Aligned with phase A axis (original Park)'`.** R2024b `sps_lib` default is `'90 degrees behind phase A axis (modified Park)'`, which rotates the plant dq frame 90° relative to the chart Park convention — a silent failure mode (motor drifts to wrong operating point, abc non-clean sinusoidal, `id` large drift, `iq` cannot track `iq_ref`). Either copy PMSM from `shared/building_blocks/pmsm_blocks.slx` (pre-set), or `set_param([mdl '/PMSM'], 'RefAngle', 'Aligned with phase A axis (original Park)')`. DTC αβ-frame methods exempt. See [references/broken_foc_diagnostics.md](references/broken_foc_diagnostics.md) F-CRIT 6.
@@ -30,7 +31,7 @@ Reusable plant + frame conventions + building blocks + sanity-check templates + 
 | 5 | Modulation (FOC-based methods only; DTC skips) | [building_blocks.md](references/building_blocks.md) |
 | 6 | Measurement + Logger | [measurement_logger.md](references/measurement_logger.md) |
 | 7 | Sanity check + Visual 4-check | [sanity_visual.md](references/sanity_visual.md) |
-| 8 | Solver + arrange + save | [measurement_logger.md](references/measurement_logger.md) |
+| 8 | Solver + layout gate (T7 zero-overlap + screenshot sign-off) + save | [measurement_logger.md](references/measurement_logger.md) |
 | 9 | Idempotent self-tests | [measurement_logger.md](references/measurement_logger.md) |
 
 If broken-FOC symptoms appear (motor stuck, abc DC-locked, iq permanently bang-bang), jump to [broken_foc_diagnostics.md](references/broken_foc_diagnostics.md).

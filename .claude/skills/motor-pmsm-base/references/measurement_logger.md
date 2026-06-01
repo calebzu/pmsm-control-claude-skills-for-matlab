@@ -106,7 +106,15 @@ Y bands:
   700–800   time + log
 ```
 
-All `add_block` calls must pass `Position`. `arrangeSystem(mdl, 'FullLayout')` is only a final fallback to fix residual overlaps.
+All `add_block` calls must pass `Position`.
+
+**The layout gate is MANDATORY, not advisory** — an advisory band scheme alone gets silently skipped, leaving auto-built diagrams unreadable. After build:
+
+- **HARD — `block_overlaps == 0`**: enforced by self-test T7 (build fails otherwise). Always achievable on a 2-D plane.
+- **HARD — human visual sign-off**: export a screenshot and have the user confirm it is not messy. Same human-in-loop gate model as the Visual 4-check; the build cannot self-pass.
+- **SOFT — line-line crossings / line-through-block (report only, NEVER a numeric gate)**: run a layout-tidy pass (arrange + de-overlap + planarity diagnosis) to minimize them, but a non-planar signal graph (K3,3/K5) cannot reach zero crossings (Kuratowski). To truly reach zero, restructure (encapsulate fan-in groups into a Subsystem, route long/shared signals via Goto/From), not by moving blocks.
+
+`arrangeSystem(mdl, 'FullLayout')` fixes overlaps + compactness but can *worsen* crossings — measure before/after and never accept a net crossing regression.
 
 ## Self-Tests (Phase 9, Idempotent)
 
@@ -143,6 +151,24 @@ function run_self_tests(mdl, p)
   out = sim(mdl, 'StopTime', '0.1');
   assert(~any(isnan(out.logsout.find('omega_m').Values.Data)), 'NaN in omega_m');
 
-  fprintf('All self-tests PASS.\n');
+  % T7: zero block-block overlaps (HARD layout gate — stops unreadable auto-built
+  % diagrams; an advisory band scheme alone gets silently skipped). Block overlap
+  % is always eliminable on a 2-D plane, so this CAN be a hard assert.
+  lb = find_system(mdl, 'SearchDepth', 1, 'Type', 'Block');
+  XY = cell2mat(get_param(lb, 'Position'));
+  for a = 1:size(XY, 1)
+    for b = a+1:size(XY, 1)
+      assert(XY(a,3) <= XY(b,1) || XY(b,3) <= XY(a,1) || ...
+             XY(a,4) <= XY(b,2) || XY(b,4) <= XY(a,2), ...
+        'T7 layout gate: blocks "%s" and "%s" overlap', lb{a}, lb{b});
+    end
+  end
+  % NOTE: line-line crossings and line-through-block hits are SOFT (report only,
+  % NEVER asserted). A non-planar signal graph (a K3,3/K5 — e.g. N estimators each
+  % fanning to a selector AND a logger) cannot reach zero crossings on a 2-D plane
+  % (Kuratowski); hard-gating crossings would reject valid models. Minimize them
+  % with a layout-tidy pass + human screenshot sign-off, never a numeric gate.
+
+  fprintf('All self-tests PASS (incl. T7 zero block overlaps).\n');
 end
 ```
