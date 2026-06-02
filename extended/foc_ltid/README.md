@@ -1,6 +1,6 @@
-# FOC-LTID — Load-Torque Estimator + Feed-Forward (community reference)
+# FOC-LTID — Load-Torque Estimator + Feed-Forward (reference)
 
-A community-contributed **reference**, not a formal skill in this repository. It builds a
+Not a formal skill in this repository. It builds a
 field-oriented PMSM speed controller augmented with a linear **load-torque estimator**
 (Luenberger + Kalman-filter family, 7 variants) whose estimate is fed forward into the
 q-axis current reference to cut load-step speed dips.
