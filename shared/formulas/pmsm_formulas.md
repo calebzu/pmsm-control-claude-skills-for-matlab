@@ -916,3 +916,104 @@ These are **not** the production form; documented so the design choice is audita
 - X. Xiong, S. Kamal, S. Jin, "Adaptive Gains to Super-Twisting Technique for Sliding Mode Design," arXiv:1805.07761, 2018 — STA form (eq. 1), perturbation bound (eq. 3), homogeneity-based gain selection (eq. 8).
 
 ---
+
+# §E — Dual-Vector FCS-MPC control law (two-vector model predictive current control)
+
+> Dual-vector-specific control law for the `motor-fcs-mpc-dualvector` skill. Plant physics, prediction, speed PI, Clarke/Park and the eight-vector set are reused by pointer (§E.0); only the dual-vector-specific N2–N5 are recorded here.
+> Reproduces Xu Yanping et al. 2017 (Two-Vector Model Predictive Current Control for PMSM, Trans. China Electrotech. Soc. 32(20):222–230). Conventions inherited from §0/§1: amplitude-invariant (2/3) Clarke-Park, rotor reference frame, `ω_e = p_n·ω_m`, SPMSM `L_d=L_q=L_s`, `id_ref=0`, `iq_ref` from the outer speed PI.
+
+## §E.0 Reused by pointer (not re-derived)
+
+| Content | Pointer |
+|---|---|
+| dq voltage / current model | §2 / §3 (SPMSM: `L_d=L_q=L_s`) |
+| Torque / mechanical / kinematics | §5 / §6 / §7 (`T_e=1.5·p_n·ψ_f·i_q`) |
+| Outer-loop speed PI → `iq_ref` | §A (Symmetric Optimum, `id_ref=0`) |
+| Clarke/Park + 8 switching vectors | §1 + §B.5 (`V_k=(2/3)·V_dc·e^{j(k−1)π/3}`, k=1..6; `V0=V7=0`) |
+| Cost / vector-selection criterion | **NOT in this doc** (control strategy, not plant physics). Dual = L1 unweighted (paper eq 7), see the skill's `algorithm_pseudocode`; single-vector = L2 weighted, see `motor-fcs-mpc`. |
+
+**One-step forward-Euler prediction** (discretization of §2/§3; shared with single-vector):
+```
+i_d(k+1) = (1 − T_s·R_s/L_d)·i_d + (ω_e·T_s·L_q/L_d)·i_q + (T_s/L_d)·u_d
+i_q(k+1) = (1 − T_s·R_s/L_q)·i_q − (ω_e·T_s·L_d/L_q)·i_d + (T_s/L_q)·u_q − ω_e·ψ_f·T_s/L_q
+```
+
+## §E.1 q-axis current slope (N2) — deadbeat basis
+
+With `i_d, i_q, ω_e` frozen over one `T_s`, `i_q` varies ~linearly; the slope is set by the applied vector's q-axis voltage `u_q`:
+```
+s₀ = (1/L_q)·(−R_s·i_q − ω_e·L_d·i_d − ω_e·ψ_f)        zero-q-voltage baseline slope
+s  = s₀ + u_q/L_q                                       slope under a vector of q-voltage u_q
+   ⇒ s_opt1 = s₀ + u_{q,opt1}/L_q     (first optimal vector V_opt1)
+   ⇒ s_j    = s₀ + u_{qj}/L_q         (j-th candidate second vector, j=1..7)
+```
+**Symbols**: `s₀` free-response q-current slope [A/s]; `s_opt1, s_j` slope under each vector [A/s]; `u_{q,opt1}, u_{qj}` that vector's q-axis voltage [V]; `L_d, L_q` [H] (SPMSM `L_d=L_q=L_s`).
+**Physical meaning**: q-current rate = baseline (back-EMF + cross-coupling drop) + applied-q-voltage contribution.
+**Derivation**: from the §3 q-axis voltage equation; the `u_q` term over `L_q` is the slope contribution. Written in the general `(L_d,L_q)` form for mild-saliency IPMSM; SPMSM (`L_d=L_q`) reduces to paper eq 9.
+**Sources**: Xu 2017 eqs (9)(10)(16)(17); two-vector deadbeat slope family (classical MPCC).
+**Dimension**: `[1/H]·[V] = [A/s]` ✓
+
+## §E.2 Dual-vector q-axis deadbeat time allocation (N3)
+
+Apply `V_opt1` for `t_opt1` and the second vector `V_j` for `(T_s − t_opt1)`; force `i_q` to its reference in one period:
+```
+i_q(k+1) = i_q(k) + s_opt1·t_opt1 + s_j·(T_s − t_opt1) = i_q*    (paper eq 14)
+⇒ t_opt1 = (i_q* − i_q(k) − s_j·T_s) / (s_opt1 − s_j)            (eq 15)
+  t_j = T_s − t_opt1
+```
+**Duty-cycle method = the zero-vector special case** (`s_j=s₀`): `γ_opt = (i_q*−i_q−s₀·T_s)/(T_s·(s_opt−s₀))` (eq 11).
+**Symbols**: `t_opt1` first-vector on-time [s]; `t_j` second-vector on-time [s]; `s_opt1, s_j` from N2 [A/s].
+**Physical meaning**: combine the two vectors' slopes to drive `i_q` exactly to its reference within one control period (deadbeat).
+**Derivation**: solve `t_opt1` from the eq-14 deadbeat condition; clamp to `[0, T_s]` per N5. Add a `1e-10` divide guard in implementation.
+**Sources**: Xu 2017 eqs (14)(15) + duty-cycle eqs (8)–(11).
+**Dimension**: `[A]/[A/s] = [s]` ✓
+
+## §E.3 Dual-vector equivalent voltage + prediction (N4)
+
+**① dq voltage of each chosen vector** (Park at `θ=θ_e`):
+```
+u_{d,opt1} =  Re(V_opt1)·cosθ + Im(V_opt1)·sinθ ;   u_{q,opt1} = −Re(V_opt1)·sinθ + Im(V_opt1)·cosθ
+u_{dj}     =  Re(V_j)·cosθ + Im(V_j)·sinθ ;          u_{qj}     = −Re(V_j)·sinθ + Im(V_j)·cosθ
+```
+**② One-period duty-weighted average voltage** (÷ `T_s`):
+```
+u_{d,avg} = [ u_{d,opt1}·t_opt1 + u_{dj}·(T_s − t_opt1) ] / T_s
+u_{q,avg} = [ u_{q,opt1}·t_opt1 + u_{qj}·(T_s − t_opt1) ] / T_s
+```
+**③ Two-vector predicted current** (substitute `u_avg` into §E.0 prediction):
+```
+i_d(k+1) = (1 − T_s·R_s/L_d)·i_d + (ω_e·T_s·L_q/L_d)·i_q + (T_s/L_d)·u_{d,avg}
+i_q(k+1) = (1 − T_s·R_s/L_q)·i_q − (ω_e·T_s·L_d/L_q)·i_d + (T_s/L_q)·u_{q,avg} − ω_e·ψ_f·T_s/L_q
+```
+**Symbols**: `u_{d,avg}, u_{q,avg}` one-period duty-weighted average dq voltage [V]; `t_opt1` from N3.
+**Physical meaning**: weight the two vectors by their on-times into an equivalent average voltage, then predict the two-vector end-of-period current.
+**Derivation / dimensional fix**: the paper's eqs (12)(13) are written as volt-seconds [V·s] but substituted into eq (3) which already carries `T_s/L` — the literal substitution double-counts `T_s`. The ÷`T_s` average-voltage form is the dimensionally-correct realization, adopted here.
+**Sources**: Xu 2017 eqs (12)(13) + dimensional fix; two-vector synthesis (classical MPCC).
+**Dimension**: `[V·s]/[s] = [V]` ✓
+
+## §E.4 On-time clamp (N5)
+
+The deadbeat `t_opt1` may fall outside `[0, T_s]` when the reference is unreachable in one period; clamp to the feasible interval:
+```
+t_opt1 = 0      if t_opt1 < 0      (V_opt1 not needed; full period to the second vector)
+t_opt1 = T_s    if t_opt1 > T_s    (V_opt1 saturates the whole period; deadbeat unreachable → best effort)
+```
+**Physical meaning**: when the target lies beyond the pair's one-period reach, clamping yields the closest feasible time split (saturation).
+**Sources**: Xu 2017 §2.4.2 (vector amplitude/time limit; Fig 4a: even duty=1 cannot reach the reference).
+**Dimension**: `[s]` ✓
+
+## §E.5 Evaluation metric (current ripple RMS — not a modeling formula)
+
+For Phase-6 quantitative comparison only; plays no role in building the model. The paper's eqs (18)(19) have a missing-square typo (the printed form is identically zero); the intended metric is the RMS of deviation (= sample std):
+```
+Δi_q = √( (1/N)·Σ(i_q(n) − ī_q)² ) ,   Δi_d = √( (1/N)·Σ(i_d(n) − ī_d)² )
+```
+- **Phase-6 anchor** (paper Table 2, 1000 r/min): dual-vector `Δi_d=0.35 / Δi_q=0.30` (vs traditional 1.15/1.5, duty-cycle 0.95/1.05).
+- **⚠️ Sampling rate (critical)**: sample `i_d/i_q` at the fast plant rate `T_s`, NOT the control rate `T_sc` — the q-axis deadbeat forces `i_q` to its reference at every `T_sc` boundary, so a `T_sc`-rate logger aliases the intra-period switching ripple away (falsely tiny `Δi_q`).
+- Note: this metric = RMS-of-deviation (= std), NOT torque MAD, NOT peak-to-peak.
+
+## Sources
+- Xu Yanping et al., "Two-Vector Model Predictive Current Control for PMSM," *Trans. China Electrotech. Soc.* 32(20):222–230, 2017 — N2–N5 control law, duty-cycle method, ripple metric.
+- Two-vector / duty-cycle MPCC family (deadbeat time allocation, equivalent-voltage synthesis) — classical predictive-current-control literature.
+
+---
