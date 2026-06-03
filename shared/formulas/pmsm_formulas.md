@@ -1017,3 +1017,119 @@ For Phase-6 quantitative comparison only; plays no role in building the model. T
 - Two-vector / duty-cycle MPCC family (deadbeat time allocation, equivalent-voltage synthesis) — classical predictive-current-control literature.
 
 ---
+
+# §F — Three-Vector FCS-MPC control law (three-vector model predictive current control)
+
+> Three-vector-specific control law for the `motor-fcs-mpc-trivector` skill. Plant physics, prediction, speed PI, Clarke/Park, the eight-vector set and the 6-sector decode are reused by pointer (§F.0); only the genuinely three-vector-specific T2(b)/T3/T4①/T5/T6(b) are recorded here.
+> Reproduces Xu Yanping et al. 2018 (Three-Vector Model Predictive Current Control for PMSM, Trans. China Electrotech. Soc. 33(5):980–986, DOI 10.19595/j.cnki.1000-6753.tces.170044). Conventions inherited from §0/§1: amplitude-invariant (2/3) Clarke-Park, rotor reference frame, `ω_e = p_n·ω_m`, SPMSM `L_d=L_q=L_s`, `id_ref=0`, `iq_ref` from the outer speed PI.
+> **Relation to the dual-vector method (§E)**: the paper compares traditional single-vector (T-MPCC), optimal-duty dual-vector (ODC-MPCC = §E, q-axis-only deadbeat) and three-vector (TV-MPCC, this section, d- AND q-axis deadbeat). TV-MPCC is a strict generalization of the dual-vector method: dual controls only `i_q` to deadbeat; TV synthesizes an expected voltage vector of arbitrary direction *and* amplitude to deadbeat both `i_d` and `i_q`.
+
+## §F.0 Reused by pointer (not re-derived)
+
+| Content | Pointer |
+|---|---|
+| dq voltage/current model + one-step forward-Euler prediction | §2 / §3 (SPMSM `L_d=L_q=L_s`); prediction as in §E.0 |
+| Torque / mechanical / kinematics | §5 / §6 / §7 (`T_e=1.5·p_n·ψ_f·i_q`) |
+| Outer-loop speed PI → `iq_ref` | §A (Symmetric Optimum, `id_ref=0`) |
+| Clarke/Park + 8 switching vectors | §1 + §B.5 (`V_k=(2/3)·V_dc·e^{j(k−1)π/3}`, k=1..6; `V0=V7=0`) |
+| q-axis current slope (s_q0, s_qi, s_qj) | **§E.1 (N2)** — identical to the dual-vector method (same authors / formula family), not re-derived |
+| 6-sector decode + adjacent active pair | **§B.4** (`S=floor(θ/(π/3))+1`; I:V1→V2 … VI:V6→V1) + §B.5 (paper Table 1 `u_k≡V_k` matches this mapping) |
+| Cost / vector-selection criterion | **NOT in this doc** (control strategy). TV = L1 unweighted (paper eq 7) evaluated over the 6 expected vectors; see the skill's `algorithm_pseudocode`. |
+
+## §F.1 T2(b) d-axis current slope — three-vector only
+
+TV-MPCC additionally deadbeats `i_d`, so it needs the **d-axis** slope the dual-vector method never required (dual controls `i_q` only). From the §3 d-axis voltage equation:
+```
+s_d0 = (1/L_d)·(−R_s·i_d + ω_e·L_q·i_q)              zero-vector baseline (paper eq 14)
+s_di = s_d0 + u_di/L_d ,  s_dj = s_d0 + u_dj/L_d      under active vectors i, j (eqs 16, 18 d-part)
+```
+The zero vector keeps the baseline slopes `(s_d0, s_q0)` (its dq voltage is 0).
+**Symbols**: `s_d0` free-response d-current slope [A/s]; `s_di, s_dj` d-current slope under active vectors i, j [A/s]; `u_di, u_dj` the two active vectors' d-axis voltage [V]; `L_d` [H]. The q-axis slopes `s_q0/s_qi/s_qj` are §E.1 (N2).
+**Physical meaning**: d-current rate = baseline (resistive drop + cross-coupling `ω_e·L_q·i_q`) + applied-d-voltage contribution.
+**Derivation**: written in the general `(L_d,L_q)` form for mild-saliency IPMSM; SPMSM (`L_d=L_q=L_s`) reduces verbatim to the paper's eq 14 `s_d0=(1/L_s)(−R_s·i_d+ω_e·i_q)` (cross term `ω_e·L_s·i_q/L_s=ω_e·i_q`). Zero fidelity cost.
+**Sources**: Xu 2018 eqs (14)(16)(18) d-part.
+**Dimension**: `[1/H]·[V] = [A/s]` ✓
+
+## §F.2 T3 d/q simultaneous deadbeat → three-vector time allocation
+
+Apply active vector `u_i` for `t_i`, adjacent active vector `u_j` for `t_j`, the zero vector for `t_z`; force **both** `i_d` and `i_q` to their references in one period:
+```
+i_d(k+1) = i_d(k) + s_di·t_i + s_dj·t_j + s_d0·t_z = i_d*    (paper eq 20)
+i_q(k+1) = i_q(k) + s_qi·t_i + s_qj·t_j + s_q0·t_z = i_q*    (eq 21)
+t_i + t_j + t_z = T_s                                       (eq 22)
+```
+Eliminate `t_z = T_s − t_i − t_j`; using `s_di−s_d0 = u_di/L_d` etc. the system becomes a 2×2:
+```
+(u_di/L_d)·t_i + (u_dj/L_d)·t_j = A ,  A = (i_d* − i_d) − s_d0·T_s
+(u_qi/L_q)·t_i + (u_qj/L_q)·t_j = B ,  B = (i_q* − i_q) − s_q0·T_s
+```
+Cramer's rule (paper eqs 23, 24, 25):
+```
+det = (u_di·u_qj − u_dj·u_qi)/(L_d·L_q)
+t_i = (A·u_qj/L_q − B·u_dj/L_d)/det        (eq 23)
+t_j = (B·u_di/L_d − A·u_qi/L_q)/det        (eq 24)
+t_z = T_s − t_i − t_j                       (eq 25)
+```
+**Symbols**: `t_i,t_j` the two active vectors' on-times [s]; `t_z` zero-vector on-time [s]; `A,B` deadbeat residual after removing the zero-vector drift [A]; `det` system determinant (∝ the two active vectors' dq cross product).
+**Physical meaning**: the dual-vector method (§E N3) solves a scalar `i_q` division; TV adds the `i_d` equation → a 2×2 solve, synthesizing an arbitrary-direction, arbitrary-amplitude voltage that nulls both axes.
+**Derivation**: substitute `t_z` into eqs (20)(21); the `s_·0·T_s` terms move right as `A,B`; the coefficient-matrix entries are exactly the per-vector slope increments `u/L` from T2. `det=0` only if the two active vectors are dq-collinear (never for two *adjacent* active vectors), so no zero-pivot guard is structurally required (a defensive `+1e-12` is acceptable). Symbolically verified: eq 20/21/22 deadbeat residuals = 0.
+**Sources**: Xu 2018 eqs (20)–(25).
+**Dimension**: `[A]/[A/s] = [s]` ✓
+
+## §F.3 T4① Expected voltage vector synthesis
+
+The zero vector contributes zero voltage, so the one-period duty-weighted average dq voltage involves only the two active vectors:
+```
+u_d = (u_di·t_i + u_dj·t_j)/T_s        (paper eq 26)
+u_q = (u_qi·t_i + u_qj·t_j)/T_s        (eq 27)
+```
+This `(u_d,u_q)` is the **expected voltage vector** `u_evv` for that sector (one per sector, six total). Substitute it into the §E.0 prediction to get the candidate predicted current `i_d^p, i_q^p`, then evaluate the cost.
+**Symbols**: `u_d,u_q` synthesized expected-vector dq voltage (one-period average) [V]; `t_i,t_j` from T3 (post-clamp, see T5).
+**Physical meaning / consistency**: if `t_i,t_j,t_z` are the exact (unclamped, in-range) deadbeat solution, then `i_d^p=i_d*`, `i_q^p=i_q*`, and `g=0` for that sector — the cost only separates sectors once clamping (T5) or sector mismatch makes the synthesized vector imperfect; this is why the selection still matters despite the deadbeat solve.
+**Sources**: Xu 2018 eqs (26)(27). This `/T_s` is the paper's own clean form (unlike the dual-vector paper, which needed a `/T_s` dimensional fix).
+**Dimension**: `[V·s]/[s] = [V]` ✓
+
+## §F.4 T5 On-time feasibility clamp / vector-count reduction (paper §4.2)
+
+After computing `t_i, t_j, t_z`, test whether each lies in `[0, T_s]`. If one is out of range, its vector is dropped, reducing the three-vector synthesis to fewer vectors:
+```
+Case 1: t_z ∉ [0,T_s] AND t_i,t_j ∈ [0,T_s]   → two active vectors over the whole period (drop zero)
+Case 2: t_z ∈ [0,T_s] AND only one of t_i,t_j ∈ [0,T_s]  → one active vector + zero vector
+Case 3: t_z ∉ [0,T_s] AND only one of t_i,t_j ∈ [0,T_s]  → one active vector over the whole period
+```
+**Physical meaning**: when the deadbeat target is unreachable in one period with the full three-vector split, the out-of-range time(s) signal that the corresponding vector should not act; dropping it yields the closest feasible synthesis (graceful degradation toward the dual-/single-vector case). Clamp out-of-range times to the boundary (0 or `T_s`) and renormalize so `t_i+t_j+t_z=T_s` before the T4 synthesis.
+**Sources**: Xu 2018 §4.2 (three cases).
+**Dimension**: `[s]` ✓
+
+## §F.5 T6(b) Expected-vector synthesis per sector + 6-candidate selection (paper §4.3)
+
+The genuine three-vector novelty: instead of evaluating the traditional 7/8 *basic* vectors, **synthesize one expected voltage vector per sector** (from its adjacent active pair via T3 time allocation + T4 synthesis) and evaluate the **6 synthesized expected vectors**:
+```
+1) sample i_d(k),i_q(k); compute the per-vector slopes (T2)
+2) for each of the 6 sectors (adjacent active pair from §B.4): compute t_i,t_j,t_z (T3)
+   → clamp (T5) → synthesize u_evv (T4①) → predict i_d^p,i_q^p (T4②)
+3) evaluate the L1 cost g (§F.0) over the 6 expected vectors
+4) select u_out = argmin g; apply its (t_i,t_j,t_z) gating for the period
+```
+The search set is **6 composite (optimal-duty) candidates**, not the 8 fixed basic vectors — this composite candidate construction is what distinguishes TV-MPCC from traditional FCS-MPC.
+**Symbols**: sector `S ∈ {1..6}` (§B.4 geometry reused).
+**Sources**: Xu 2018 §4.3 (selection procedure); sector geometry reused from §B.4/§B.5.
+**Dimension**: cost `[A]` (L1 current error) ✓
+
+## §F.6 Evaluation metric (current ripple RMS — not a modeling formula)
+
+For Phase-6 quantitative comparison only; plays no role in building the model.
+```
+Δi_q = √( (1/N)·Σ(i_q(n) − ī_q)² ) ,   Δi_d = √( (1/N)·Σ(i_d(n) − ī_d)² )
+```
+- **Phase-6 anchor** (paper Table 4, 1000 r/min no-load): TV-MPCC `Δi_d=0.21 / Δi_q=0.24` (vs ODC-MPCC 0.69/0.41, traditional 1.10/1.10; TV lowest in all cases). Trend anchors: Fig 7 (ripple vs speed 400–2000 r/min), Fig 8 (ripple vs load 0–7.15 N·m @ 800 r/min).
+- **⚠️ Sampling rate (critical)**: sample `i_d/i_q` at the fast plant rate `T_s`, NOT the control rate `T_sc` — the dual-axis deadbeat aliases the intra-period ripple away at `T_sc` (falsely tiny ripple), same caveat as §E.5.
+- **⚠️ No-load fundamental FFT**: at no-load the fundamental current (~`Pn·rpm/60` Hz) is buried under switching ripple; a global FFT peak lands on the switching frequency. Band-filter near `Pn·rpm/60` to confirm the fundamental, do not take the global peak.
+- **⚠️ Equal-switching-frequency comparison**: the ripple advantage is only meaningful at **equal switching frequency** (switching faster trivially lowers ripple). Because the three methods apply 1/2/3 vectors per period, an equal-switching-frequency comparison requires `T_sc` in the ratio single:dual:tri = 1:2:3. Under that constraint the TV advantage concentrates in the **d-axis** (TV is the only method that deadbeats `i_d`); on q-axis / torque ripple TV is comparable to single-vector and the dual-vector advantage (which is quoted at the *same* `T_sc`) largely evaporates. A same-`T_sc` ripple comparison overstates both dual and tri.
+- Note: this metric = RMS-of-deviation (= std), NOT torque MAD, NOT peak-to-peak. An ideal simulation gives lower ripple than the paper's hardware experiment (no deadtime / sensor noise).
+
+## Sources
+- Xu Yanping et al., "Three-Vector Model Predictive Current Control for PMSM," *Trans. China Electrotech. Soc.* 33(5):980–986, 2018 (DOI 10.19595/j.cnki.1000-6753.tces.170044) — T2(b)–T6(b) control law, dual-axis deadbeat, ripple metric.
+- Three-vector / expected-voltage-synthesis MPCC family — predictive-current-control literature; sector geometry from classical SVPWM.
+
+---
