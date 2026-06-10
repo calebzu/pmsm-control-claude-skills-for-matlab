@@ -24,11 +24,13 @@ If the MCP server is not available, run MATLAB through its CLI:
 
 - `motor-pmsm-base` — plant + dq conventions + building-blocks SOP + broken-FOC defense. Base for the method skills.
 - `motor-fcs-mpc` — single-vector Finite-Control-Set MPC current loop.
+- `motor-fcs-mpc-dualvector` — dual-vector (two-vectors-per-period) FCS-MPC current loop with q-axis deadbeat time allocation. Layers on `motor-fcs-mpc`.
+- `motor-fcs-mpc-trivector` — three-vector (two adjacent active + one zero per period) FCS-MPC current loop; a 2×2 dual-axis deadbeat solve nulls both `i_d` and `i_q` in one period.
 - `motor-dtc-pmsm` — Direct Torque Control, αβ frame, Sutikno 6-state switching table.
 - `motor-smc-pmsm` — Sliding Mode Control speed loop (PD-type sliding + super-twisting) over a dq PI current loop.
 - `simulink-layout-tidy` — general-purpose Simulink layout tidier (compact, overlap-free, honest crossing report). Not motor-specific; supports the layout gate.
 
-Each method skill layers on `motor-pmsm-base`. Read the relevant `SKILL.md` and its `references/` before building.
+Each method skill layers on `motor-pmsm-base` (`motor-fcs-mpc-dualvector` additionally builds on `motor-fcs-mpc`). Read the relevant `SKILL.md` and its `references/` before building.
 
 ## Methodology
 

@@ -50,7 +50,7 @@ There is **no SVPWM and no Anti_Park** — the selected discrete vectors are app
 | 3 | Outer speed PI (RPM↔rad/s, mandatory saturation) | [parameter_defaults.md](references/parameter_defaults.md), [scripts/speed_pi_design.m](scripts/speed_pi_design.m) |
 | 4 | `DualVecMPC` two-stage controller chart | [algorithm_pseudocode.md](references/algorithm_pseudocode.md) + [crit_conditions.md §G/§K](references/crit_conditions.md) |
 | 5 | `TimeSlicer` two-vector sequencer + Digital Clock | [algorithm_pseudocode.md](references/algorithm_pseudocode.md) §slicer + [crit_conditions.md §G/§D](references/crit_conditions.md) |
-| 6 | Logging (port DataLogging or To Workspace @ Tsc) | [acceptance_criteria.md](references/acceptance_criteria.md) |
+| 6 | Logging (To Workspace @ fast rate `Ts` for ripple signals `i_d/i_q`; controller outputs may log @ Tsc) | [acceptance_criteria.md](references/acceptance_criteria.md) |
 | 7 | Solver (fixed-step discrete, FixedStep = Ts; powergui Discrete) + InitFcn injection | [crit_conditions.md §J](references/crit_conditions.md) |
 | 8 | Self-tests + acceptance (visual 4-check, then §E ripple vs operating point) | [acceptance_criteria.md](references/acceptance_criteria.md) |
 

@@ -37,7 +37,7 @@ Inner PI saturation: `LimitOutput='on'`, `±Vdc/√3`, `AntiWindup='clamping'`.
 
 | Parameter | Default | Notes |
 |---|---|---|
-| `B` | `0.008` (≈ 26× small-motor hardware spec) | **v1 baseline assumes `B > 0`** (validated envelope; not a theoretical requirement — STA is damping-independent). If `B ≈ 0`, re-validate STA gains rather than adding artificial damping |
+| `B` | `0.008` | **v1 baseline assumes `B > 0`** (validated envelope; not a theoretical requirement — STA is damping-independent). If `B ≈ 0`, re-validate STA gains rather than adding artificial damping |
 
 ## Voltage Source
 
@@ -69,24 +69,9 @@ Inner PI saturation: `LimitOutput='on'`, `±Vdc/√3`, `AntiWindup='clamping'`.
 | `TL_step_t` | `0.6 s` | Must be > `ramp_time + 4·λ_pd` (sliding-phase settled before disturbance) |
 | `TL_after` | 30–80% of rated torque | Must satisfy `\|TL_after\| ≤ TL_max` |
 
-## Generic Typical Plant (textbook 1 kW SPMSM)
+## Plant Parameters
 
-A generic textbook 1 kW SPMSM parameter set for sanity-checking the build template.
-**Not from any reference model** — these are typical servo values, safe to publish:
-
-```
-Pn = 4
-Rs = 0.9585
-Ld = 4.987e-3, Lq = 5.513e-3
-psi_f = 0.1827
-J = 6.329e-4
-B = 0.008
-Vdc = 500
-iq_max = 12, TL_max = 2
-omega_ref_rpm = 2000
-ramp_time = 0.5
-TL_step_t = 0.6, TL_after = 2
-```
+This skill ships no concrete plant parameter set (same convention as `motor-fcs-mpc` / `motor-dtc-pmsm`): plant electrical/mechanical parameters (`Pn`, `Rs`, `Ld`, `Lq`, `psi_f`, `J`, `B`) come from the user's machine datasheet. Derive `Vdc`, `iq_max`, and the STA gains from them using the rules above. The skill was validated on a private test case (see the repository README, "Reproducibility & Evidence").
 
 ## Logger
 

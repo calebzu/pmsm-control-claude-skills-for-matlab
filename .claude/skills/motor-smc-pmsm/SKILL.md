@@ -57,7 +57,7 @@ Ask user before starting. Defaults in [parameter_defaults.md](references/paramet
 | Group | Parameters |
 |---|---|
 | **Machine** (6) | `Pn`, `Rs`, `Ld, Lq` (mild-saliency `Lq/Ld < 2` v1; strong saliency deferred), `psi_f`, `J`, **`B > 0`** (v1 baseline, default 0.008) |
-| **Power stage** (1) | `Vdc` (default ≥ 1.5× ω_max·ψ_f / √3 peak phase BEMF) |
+| **Power stage** (1) | `Vdc` (default ≥ `1.5·√3·ω_e_max·ψ_f`, i.e. `Vdc/√3` ≥ 1.5× peak phase BEMF `ω_e_max·ψ_f`) |
 | **Control** (3) | `iq_max`, `T_max` (default `1.5·Pn·ψf·iq_max`), **`TL_max` always asked** (Lyapunov bound input) |
 | **SMC design** (4) | `lambda_pd_settling` (default 10 ms), `Tf_deriv` (default `Tsc`), `K1_sta` (auto), `K2_sta` (auto) |
 | **Current PI** (1) | `omega_c_inner` (default 2000 rad/s, ≈ 5× SMC bandwidth) |

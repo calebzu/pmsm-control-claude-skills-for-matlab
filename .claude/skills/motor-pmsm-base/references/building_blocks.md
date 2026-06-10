@@ -2,13 +2,14 @@
 
 ## Atomic Block Library
 
-`shared/building_blocks/pmsm_blocks.slx` provides verified atomic blocks (parameter placeholders, shareable across methods):
+`shared/building_blocks/pmsm_blocks.slx` provides 14 verified atomic blocks (parameter placeholders, shareable across methods). Authoritative list with full mask configs: `shared/building_blocks/pmsm_blocks_manifest.md`.
 
-- **Park / Clarke / Anti-Park / Anti-Clarke** (amplitude-invariant, matches the conventions in [plant_modeling.md](plant_modeling.md))
-- **Anti_Park** subsystem (dq → αβ inverse Park, internally reads θ_e via Goto/From)
+- **Transforms** — `Clark` (abc → αβ, amplitude-invariant), `Plark` (αβ → dq, original Park; θ_e as explicit inport), `Anti_Park` (dq → αβ inverse Park; reads θ_e internally via `From "The"`). Conventions match [plant_modeling.md](plant_modeling.md)
 - **PMSM block** (R2024b SPS wrapper with explicit mask settings — `RefAngle` pre-set to original Park to match `shared/formulas/pmsm_formulas.md §1`; the `sps_lib` bare default is modified Park, 90° offset — see RefAngle CRIT below and F-CRIT 6)
 - **SVPWM** (project-built SubSystem inside `pmsm_blocks.slx`, block name `SVPWM` — 5 sub-subsystems: Sector_Caculate / T1T1_Caculate / Tcm_Caculate / XYZ_Caculate / PWM)
-- Common utilities: Mux 3, Demux, Constant, Gain, Sum, Integrator (with init)
+- **Power stage** — `powergui` (Discrete), `DC_Voltage_Source`, `Universal_Bridge` (IGBT/Diodes inverter)
+- **Measurement & routing** — `BusSelector_PMSM` (OutputSignals `'ias,ibs,ics,w,Te'`), `VoltageMeasurement`, `CurrentMeasurement`
+- **Rate utilities** — `ZOH_Tsc`, `UnitDelay_Tsc` (SampleTime = Tsc), `RateLimiter` (ω_ref ramp)
 
 ## Reuse Discipline
 

@@ -81,7 +81,11 @@ function build_pmsm_method(params)
   set_param(mdl, 'StopTime', sprintf('%g', p.sim_time), ...
                  'Solver', 'ode23tb', ...
                  'ZeroCrossControl', 'DisableAll');
-  try, arrangeSystem(mdl, 'FullLayout'); catch, end
+  try
+    Simulink.BlockDiagram.arrangeSystem(mdl, 'FullLayout', 'true');
+  catch e
+    warning('arrangeSystem failed (%s) — fix layout manually; T7 still enforces block_overlaps == 0', e.message);
+  end
   save_system(mdl);
 
   %% Phase 9 — self-tests (idempotent)
@@ -114,7 +118,7 @@ All `add_block` calls must pass `Position`.
 - **HARD — human visual sign-off**: export a screenshot and have the user confirm it is not messy. Same human-in-loop gate model as the Visual 4-check; the build cannot self-pass.
 - **SOFT — line-line crossings / line-through-block (report only, NEVER a numeric gate)**: run a layout-tidy pass (arrange + de-overlap + planarity diagnosis) to minimize them, but a non-planar signal graph (K3,3/K5) cannot reach zero crossings (Kuratowski). To truly reach zero, restructure (encapsulate fan-in groups into a Subsystem, route long/shared signals via Goto/From), not by moving blocks.
 
-`arrangeSystem(mdl, 'FullLayout')` fixes overlaps + compactness but can *worsen* crossings — measure before/after and never accept a net crossing regression.
+`Simulink.BlockDiagram.arrangeSystem(mdl, 'FullLayout', 'true')` fixes overlaps + compactness but can *worsen* crossings — measure before/after and never accept a net crossing regression.
 
 ## Self-Tests (Phase 9, Idempotent)
 

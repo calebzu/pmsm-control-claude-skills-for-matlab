@@ -18,7 +18,7 @@ For each decision, present the user with options + recommended default, then get
 | D12 | `Goto_The TagVisibility` | **`'global'`** (G-CRIT mandatory) | `'local'` (default) ❌ silent failure: Anti_Park internal From invisible → FOC degenerates to lab-frame open-loop |
 | D13 | FF Mux input | **Port 1 = ω_e from `Gain_Pn_omega`** (independent block) (H-CRIT mandatory) | Port 1 = θ_e from `Gain_Pn` ❌ dimensional bug: `Vq_ff = θ_e·ψ_f` instead of `ω_e·ψ_f` |
 | D14 | Plant friction `B` | **B > 0 in v1 baseline**, default 0.008 (C-CRIT envelope guard) | B = 0 not a theoretical blocker (STA convergence is damping-independent), but **outside v1 validated envelope** → re-validate gains if B≈0 |
-| D15 | Vdc | **≥ 1.5× ω_max·ψ_f / √3** peak phase BEMF headroom | Tight (Vdc/BEMF ~1.13×) ❌ PI saturation continuous → tracking degrades |
+| D15 | Vdc | **≥ 1.5·√3·ω_e_max·ψ_f** (`Vdc/√3` ≥ 1.5× peak phase BEMF headroom) | Tight (Vdc/BEMF ~1.13×) ❌ PI saturation continuous → tracking degrades |
 | D16 | Solver | **Fixed-step `ode3` + `ZeroCrossControl='DisableAll'`** (E-CRIT) | Variable-step ❌ adaptive sub-stepping at sgn flips; ZC ON ❌ same |
 | D17 | Step size | **1 µs** (= Tsc/50) | Tsc/100 OK; larger ❌ aliasing on PWM edges |
 | D18 | Tsc | **50 µs** | 100 µs OK (slower chattering visualization); 25 µs OK (more compute) |

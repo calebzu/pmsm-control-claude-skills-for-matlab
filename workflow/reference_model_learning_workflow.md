@@ -50,7 +50,7 @@ Three tiers:
 |---|---|---|---|
 | 🟢 **Methodology** | Minimal skeleton, conventions, enhancement checklist, common-error checklist, design decisions | ✅ | "Cost function: `λ_d · e_d² + λ_q · e_q²`"; "Use amplitude-invariant Park transform"; "Prediction horizon N=1, forward-Euler discretization" |
 | 🟡 **Platform API know-how** | R2024b platform facts independent of any specific reference | ✅ | "SimPowerSystems library path"; "Universal Bridge mask field is `Arms`"; "Stateflow chart type `Stateflow.EMChart`" |
-| 🔴 **Reference-specific** | Parameter values, filenames, fully-wired subsystems, identifying topology | ❌ | `Rs = 0.9585 Ω`; `<reference_model>.slx`; complete plant wiring diagram |
+| 🔴 **Reference-specific** | Parameter values, filenames, fully-wired subsystems, identifying topology | ❌ | `Rs = 1.23 Ω`; `<reference_model>.slx`; complete plant wiring diagram |
 
 **Separation rule**: Tier 🟡 captures what R2024b literally requires; Tier 🟢 captures what *good* design chooses. The distinction matters at rebuild time: a subagent with 🟢 alone may know to apply Park transformation but cannot construct the block because it doesn't know the R2024b mask field names.
 
@@ -709,7 +709,7 @@ Load the baseline waveforms and the rebuild waveforms; overlay the five primary 
 | `J / B / Pn` | Within 2× of the SKILL.md default envelope |
 | `i_q,max` | ≥ 1.4 · `i_q,steady at T_L,max` (avoid starvation-saturation artefacts) |
 | `sim_time` | ≥ 5 · `τ_max` (the slowest pole from Phase 4.5) |
-| `V_dc` | ≥ 1.5 · `ω_max · ψ_f / √3` (peak phase BEMF) |
+| `V_dc` | ≥ `1.5 · √3 · ω_e,max · ψ_f` (so that `V_dc/√3` ≥ 1.5 × peak phase BEMF) |
 | `T_L,max` / step time | `T_L,step_time ≥ ramp_time + 5 · τ_inner` so the load step does not coincide with a transient |
 
 **Anti-pattern**: A subagent reports "the scenario drifted outside the SKILL.md envelope" → main session mistakes the report for a SKILL.md fix request. The correct response is to adjust the brief (raise `J`, raise `i_q,max`, lengthen `sim_time`) as an acceptance-test design improvement.
@@ -995,7 +995,7 @@ A skill that survived four or more FAIL-revise cycles has three audiences with d
 
 ### ❌ A skill must not contain
 
-- Specific numerical parameters (`L_q = 5.513 mH` → use `<L_q>`).
+- Specific numerical parameters (`L_q = 9.87 mH` → use `<L_q>`).
 - Specific reference-model filenames (`<reference_name>.slx` → "the reference" / "the baseline").
 - Mask-field dumps.
 - Author or affiliation information from the reference.
