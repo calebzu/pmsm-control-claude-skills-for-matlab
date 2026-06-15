@@ -26,6 +26,7 @@ prerequisites, open Claude Code in the folder, and follow [`CLAUDE.md`](CLAUDE.m
 - **`motor-fcs-mpc-trivector`** — three-vector (two adjacent active + one zero per period) FCS-MPC current loop: a 2×2 dual-axis deadbeat solve synthesizes an expected voltage vector that nulls both `i_d` and `i_q` in one period. Layers on `motor-pmsm-base`.
 - **`motor-dtc-pmsm`** — Direct Torque Control (αβ frame, Sutikno 6-state switching table).
 - **`motor-smc-pmsm`** — Sliding Mode Control speed loop (PD-type sliding surface + super-twisting) over a dq PI current loop.
+- **`motor-mfpcc-eso`** — model-free deadbeat predictive current control (ultralocal model + Extended State Observer) modulated by SVPWM. The current law uses no machine parameters — only the input gain `α` and ESO bandwidth `ω0`. Continuous control set (deadbeat + SVM), **not** FCS-MPC. Layers on `motor-pmsm-base`.
 - **`simulink-layout-tidy`** — general-purpose Simulink layout tidier: removes block overlaps, minimizes line crossings honestly (never promising a zero the graph's topology forbids), and exports a screenshot for human sign-off. Not motor-specific; supports the layout gate used in the build workflow.
 
 ## Prerequisites

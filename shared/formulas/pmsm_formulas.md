@@ -2,7 +2,7 @@
 
 A reference set of PMSM (permanent-magnet synchronous motor) modeling and control formulas for `motor-pmsm-base` and method skills (`motor-fcs-mpc`, `motor-dtc-pmsm`, `motor-smc-pmsm`). The document is organized:
 
-- **§0–§7**: PMSM plant equations (dq-frame voltage, flux, torque, mechanical, kinematic)
+- **§0–§7**: PMSM plant equations (dq-frame voltage, flux, torque, mechanical, kinematic); **§8**: αβ complex-vector plant form (SPMSM)
 - **§A**: Outer-loop speed PI design (4 methods + selection decision tree)
 - **§B**: DTC controller-side formulas (αβ flux estimator, sector decoding, switching table, hysteresis comparators)
 - **§C**: SMC speed-loop control law (PD-type sliding + Super-Twisting, Lyapunov gain conditions, chattering)
@@ -246,6 +246,47 @@ time-domain:
 ### Implementation notes
 - **Angle wrap-around**: `mod(θe, 2π)` for numerical precision (controller must do this; plant model can omit)
 - **Encoder calibration**: physical encoder gives θm; θ_offset calibration aligns to d-axis (A3 convention)
+
+---
+
+## §8 αβ complex-vector plant form (SPMSM)
+
+> Stationary-frame (αβ) statement of the basic machine equations, used by model-free / stationary-frame predictive control (e.g. `motor-mfpcc-eso`). It is the αβ equivalent of §2/§3/§4 under the **SPMSM** assumption (`Ld = Lq = Ls`), obtained by the inverse Park rotation of §1. **Premise: SPMSM** — IPMSM saliency breaks this compact form (introduces 2θe coupling).
+
+### Flux (= §4 in αβ)
+```
+ψα = Ls·iα + ψf·cosθe
+ψβ = Ls·iβ + ψf·sinθe
+```
+
+### Voltage (= §2/§3 in αβ; no rotational coupling term in the stationary frame)
+```
+uα = Rs·iα + dψα/dt
+uβ = Rs·iβ + dψβ/dt
+```
+
+### Current dynamics (from the two above, back-EMF explicit)
+```
+diα/dt = (uα − Rs·iα + ωe·ψf·sinθe) / Ls
+diβ/dt = (uβ − Rs·iβ − ωe·ψf·cosθe) / Ls
+```
+
+### Complex-vector compact form (i_s = iα + j·iβ)
+```
+u_s = Rs·i_s + dψ_s/dt,    ψ_s = Ls·i_s + ψf·e^{jθe}
+di_s/dt = (1/Ls)·(u_s − Rs·i_s − jωe·ψf·e^{jθe})
+```
+
+### Equivalence with dq (§2/§3/§4)
+Complex-vector relation `x_s^αβ = x_s^dq·e^{jθe}`, Park rotation (§1):
+```
+ψd =  ψα·cosθe + ψβ·sinθe → Ls·id + ψf   ✓ (= §4, Ld=Lq=Ls)
+ψq = −ψα·sinθe + ψβ·cosθe → Ls·iq         ✓ (= §4)
+```
+For voltage likewise: the dq rotational coupling ωe·ψ is absorbed into dψ/dt and the back-EMF term in αβ. **Exactly equivalent under SPMSM** ✓
+
+### Physical meaning
+Working directly in αβ avoids the synchronous transform; the back-EMF appears as the rotating term `jωe·ψf·e^{jθe}`. A model-free controller (§G) lumps `(−Rs·i_s − jωe·ψr)/Ls` into a single disturbance estimated online, so its control law needs none of `Rs, Ls, ψf`. Method-specific formulas (ultralocal model / ESO / deadbeat / delay compensation) built on this plant: **§G**.
 
 ---
 
@@ -1131,5 +1172,120 @@ For Phase-6 quantitative comparison only; plays no role in building the model.
 ## Sources
 - Xu Yanping et al., "Three-Vector Model Predictive Current Control for PMSM," *Trans. China Electrotech. Soc.* 33(5):980–986, 2018 (DOI 10.19595/j.cnki.1000-6753.tces.170044) — T2(b)–T6(b) control law, dual-axis deadbeat, ripple metric.
 - Three-vector / expected-voltage-synthesis MPCC family — predictive-current-control literature; sector geometry from classical SVPWM.
+
+---
+
+# §G — MFPCC-ESO control law (model-free deadbeat predictive current control + extended state observer)
+
+> Control law for the `motor-mfpcc-eso` skill. Plant physics (αβ complex-vector SPMSM) is reused by pointer (§G.0 / §8); only the ultralocal-model + ESO + deadbeat formulas are recorded here.
+> Reproduces Y. Zhang, J. Jin, L. Huang, "Model-Free Predictive Current Control of PMSM Drives Based on Extended State Observer Using Ultralocal Model," *IEEE Trans. Ind. Electron.* 68(2):993–1002, 2021 (DOI 10.1109/TIE.2020.2970660). Conventions inherited from §0/§1: amplitude-invariant (2/3) Clarke, SPMSM `Ld=Lq=Ls`, `id_ref=0`, `iq_ref` from the outer speed PI (§A).
+> **Method identity (PINNED)**: this is DEADBEAT predictive current control + SVM (continuous control set), NOT finite-control-set MPC — no vector enumeration, no cost function. Evidence in §G.5. Do not layer it on the FCS-MPC family.
+> **Notation**: the source-paper PDF text layer dropped Greek letters / sub- and super-scripts; every equation below is reconstructed from the visible structure + physical (dimensional, dq↔αβ) consistency, flagged inline where reconstructed.
+
+## §G.0 Reused by pointer (not re-derived)
+
+| Content | Pointer |
+|---|---|
+| αβ complex-vector SPMSM plant (`di_s/dt = (1/Ls)(u_s − Rs·i_s − jωe·ψr)`) | **§8** |
+| Clarke abc→αβ (amplitude-invariant 2/3) | §1 |
+| Outer-loop speed PI → `iq_ref` | §A (`id_ref=0`) |
+| SVPWM modulation of the continuous voltage reference | building-blocks SVPWM (skill `build_sop`) |
+
+## §G.1 Ultralocal model
+
+First-order **ultralocal model** of a SISO system (Fliess & Join):
+
+**(4)**  `ẏ = F + α·u`
+
+where `α` is a designer-chosen non-physical input gain and `F` lumps the known **and** unknown system dynamics. (Extracted "y = F + u"; the `α` on `u` and the dot on `y` were dropped by pdftotext, both required dimensionally by (7).) Matching the αβ current dynamics (§8) to (4):
+
+**(7)**  `di_s/dt = F + α·u_s`,  with  `F = (−Rs·i_s − jωe·ψr)/Ls`  (unknown part),  `α = 1/Ls` (nominal input gain).
+
+`F` is the **lumped disturbance** — it swallows resistance, back-EMF, and all parameter variation; `α` is nominally `1/Ls` but treated as a **single tunable constant** (§G.6: α=50, fixed for all sampling rates, NOT identified from Ls). This is why the control law uses no machine parameters.
+**Symbols**: `u,y` control/output; `α` input gain; `F` lumped disturbance [A/s]; `i_s = iα+jiβ`; `ψr = ψf·e^{jθe}`.
+**Sources**: Zhang 2021 §III eq (4); §IV-A eq (7).
+
+## §G.2 Linear ESO + bandwidth parameterization
+
+States `z1 = î_s`, `z2 = F̂`, driven by the estimation error `ε = z1 − i_s` (eq 8):
+
+**(8)**
+```
+ε  = z1 − i_s
+ż1 = z2 + α·u_s − β1·ε
+ż2 =            − β2·ε
+```
+
+Matrix form (eq 9): `ż = A·z + B·u_s + D·(y−ŷ)`, `ŷ = C·z`, with `A=[0 1;0 0]`, `B=[α;0]`, `C=[1 0]`, `D=[β1;β2]`.
+Error-dynamics characteristic polynomial (eq 10): `s² + β1·s + β2`. Place **both** observer poles at `−ω0` (Gao bandwidth parameterization):
+
+**(11)** `β1 = 2·ω0`   **(12)** `β2 = ω0²`
+
+**Physical meaning**: one knob `ω0` sets the whole observer — larger `ω0` ⇒ faster `F̂` convergence but more noise amplification / less robustness.
+**Sources**: Zhang 2021 §IV-A eqs (8)–(12); Gao 2003 bandwidth parameterization.
+
+## §G.3 Discrete ESO + double-pole (z12) tuning
+
+Forward-Euler at the control period `Tsc`, with discrete gains `β01 = Tsc·β1`, `β02 = Tsc·β2` (eq 13):
+
+**(13)**
+```
+ε(k)     = î_s(k) − i_s(k)
+î_s(k+1) = î_s(k) + Tsc·F̂(k) + Tsc·α·u_s(k) − β01·ε(k)
+F̂(k+1)  = F̂(k)                              − β02·ε(k)
+```
+
+Discrete characteristic equation (eq 15): `z² + (β01−2)·z + (1−β01+β02·Tsc) = 0`. Substituting the bandwidth parameterization yields a **double pole** (eq 16) and its inverse map (eq 17):
+
+**(16)** `z1,2 = 1 − ω0·Tsc`   **(17)** `ω0 = (1 − z12)/Tsc`
+
+Pick the double pole `z12 ∈ (0,1)`: `z12 → 1` (small ω0) ⇒ sluggish; `z12 → 0` (large ω0) ⇒ fast but fragile. Paper default **z12 = 0.15**.
+Closed-form chain asserted by the build: `omega0 = (1−z12)/Tsc; beta01 = 2·omega0·Tsc; beta02 = omega0²·Tsc`.
+**Numeric anchor** (`Tsc = 1e-4`, `z12 = 0.15`): `omega0 = 8500`, `beta01 = 1.7`, `beta02 = 7225`.
+**Dimension**: `β01 = 2(1−z12)` (dimensionless), `β02 = (1−z12)²/Tsc` [1/s] ✓
+**Sources**: Zhang 2021 §IV-A/B eqs (13)–(17).
+
+## §G.4 Deadbeat voltage solve + one-step delay compensation
+
+Invert (7) for the voltage, replacing `F` by `F̂` (eq 18) and forcing `i_s(k+1) = i_s,ref` (deadbeat, eq 19). For the one-period digital delay, compensate one step ahead using the ESO's (k+1) predictions (eq 20):
+
+**(20)** `u_s,ref = (1/α)·[ (i_s,ref(k+2) − î_s(k+1))/Tsc − F̂(k+1) ]`
+
+with the reference rotated forward two steps (eq 21):
+
+**(21)** `i_s,ref(k+2) = i_s,ref(k)·e^{j·2·ωe·Tsc}`   *(exponent reconstructed; extracted "ej(rk+2rTsc)")*
+
+The compensated 1-step delay is **physically real** in the build — it is the output Unit Delay between the controller chart and SVPWM; removing it or swapping in a ZOH compensates a delay that no longer exists and the loop diverges. `u_s,ref` is a **continuous** voltage vector handed to SVPWM (see §G.5).
+**Sources**: Zhang 2021 §IV-C eqs (18)–(21).
+
+## §G.5 Method identity — deadbeat + SVM, NOT FCS  ⚠ PINNED
+
+**VERDICT: deadbeat predictive current control + SVM (continuous control set), NOT finite-control-set MPC.** Despite the umbrella name "Predictive Current Control," there is no enumeration of inverter voltage vectors and no cost-function minimization anywhere in the paper. Evidence:
+
+1. **§IV-C, verbatim**: "u_s,ref … is **synthesized by SVM** to generate the final gating pulses." → a continuous reference fed to a modulator, not a switching state.
+2. **Eqs (18)–(20) are a closed-form deadbeat solve**: voltage obtained by setting `i_s(k+1)=i_s,ref` and algebraically inverting the ultralocal model. No candidate set, no `argmin` over `{u0…u7}`, no per-vector cost.
+3. **Absence test**: the paper never lists 7/8 voltage vectors, never defines a cost `g=|i_ref−i_pred|`, never iterates over inverter states — all hallmarks of FCS-MPC are missing.
+
+**Consequence**: the method belongs to the **deadbeat-PCC / MFPCC + SVM** family — fixed switching frequency, continuous control set. Do NOT layer it on the FCS-MPC skills.
+
+## §G.6 Parameters
+
+| Symbol | Value | Source | Note |
+|---|---|---|---|
+| `α` (input gain) | 50 (all fs) | §IV-B, §V | fixed; NOT set to 1/Ls; one of the 2 tuned params |
+| `z12` (double pole) | 0.15 | §IV-B | fast current loop |
+| `ω0` | `(1−z12)/Tsc` | (17) | e.g. 4250 / 8500 / 17000 @ fs = 5 / 10 / 20 kHz |
+| `β1, β2` | `2ω0`, `ω0²` | (11)(12) | continuous gains |
+| `β01, β02` | `2ω0·Tsc`, `ω0²·Tsc` | (13)(16) | discrete gains |
+| tuned-param count | **2** (`ω0`, `α`) | Table II | vs conventional MFPCC's 5 |
+
+Plant (paper Table I, SPMSM): `Udc=540 V, P_N=2.4 kW, U_N=380 V, I_N=4.1 A, f_N=100 Hz, T_N=10 N·m, rated 1500 r/min, Np=4, Rs=2.34 Ω, Ld=Lq=19.36 mH, ψf=0.402 Wb`. Inertia `J`, friction `B`, and speed-loop PI gains are not tabulated (supply per machine; the model-free current loop does not use them). Consistency cross-checks: torque `1.5·Np·ψf·I_N = 9.89 ≈ 10 N·m` ✓; speed `f_N/Np = 25 rev/s = 1500 r/min` ✓; SVM headroom `Udc/√3 = 311 V ≈ U_N·√2/√3 = 310 V` ✓.
+
+> **Conventional MFPCC control law (paper eqs 5–6) is intentionally omitted**: a dq-form error-feedback law (5 tuned params) used by the paper only as the comparison baseline. The proposed method runs in αβ with deadbeat (this section, 2 tuned params) and does not use it.
+
+## Sources
+- Y. Zhang, J. Jin, L. Huang, "Model-Free Predictive Current Control of PMSM Drives Based on Extended State Observer Using Ultralocal Model," *IEEE Trans. Ind. Electron.* 68(2):993–1002, 2021 (DOI 10.1109/TIE.2020.2970660) — ultralocal model, ESO, deadbeat voltage solve, delay compensation.
+- M. Fliess, C. Join, "Model-free control," *Int. J. Control* 86(12):2228–2252, 2013 — ultralocal model.
+- Z. Gao, "Scaling and bandwidth-parameterization based controller tuning," *Proc. American Control Conf.*, 2003 — ESO bandwidth parameterization.
 
 ---

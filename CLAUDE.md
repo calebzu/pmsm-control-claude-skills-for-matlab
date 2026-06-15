@@ -28,6 +28,7 @@ If the MCP server is not available, run MATLAB through its CLI:
 - `motor-fcs-mpc-trivector` — three-vector (two adjacent active + one zero per period) FCS-MPC current loop; a 2×2 dual-axis deadbeat solve nulls both `i_d` and `i_q` in one period.
 - `motor-dtc-pmsm` — Direct Torque Control, αβ frame, Sutikno 6-state switching table.
 - `motor-smc-pmsm` — Sliding Mode Control speed loop (PD-type sliding + super-twisting) over a dq PI current loop.
+- `motor-mfpcc-eso` — model-free deadbeat predictive current control (ultralocal model + Extended State Observer + SVPWM); parameter-free current law (only `α`, `ω0`). Continuous control set, not FCS-MPC. Layers on `motor-pmsm-base`.
 - `simulink-layout-tidy` — general-purpose Simulink layout tidier (compact, overlap-free, honest crossing report). Not motor-specific; supports the layout gate.
 
 Each method skill layers on `motor-pmsm-base` (`motor-fcs-mpc-dualvector` additionally builds on `motor-fcs-mpc`). Read the relevant `SKILL.md` and its `references/` before building.

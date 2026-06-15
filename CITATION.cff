@@ -2,8 +2,8 @@ cff-version: 1.2.0
 title: "PMSM Control Claude Skills (for MATLAB/Simulink): A Methodology and Skill Library for AI-Augmented PMSM Simulink Modeling"
 message: "If you use this software, please cite it using the metadata below."
 type: software
-version: 1.2.0
-date-released: 2026-06-03
+version: 1.3.0
+date-released: 2026-06-15
 license: Apache-2.0
 repository-code: "https://github.com/calebzu/pmsm-control-claude-skills-for-matlab"
 authors:
